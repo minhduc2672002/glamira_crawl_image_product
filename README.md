@@ -1,1 +1,1 @@
-replace urls_test to urls to scrape all data
+replace urls_test.csv to urls.csv to scrape all data
