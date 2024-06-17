@@ -16,6 +16,7 @@ class Crawler:
         self.checklist_df = self.create_checklist()
         self.max_woker = max_woker
         self.image_path = image_path
+        self.total_product = 0
 
     def polite_request(self, url):
         while True:
@@ -64,14 +65,17 @@ class Crawler:
                 for future in concurrent.futures.as_completed(futures):
                     data = future.result()
                     self.save_to_csv(data, file_path)
+                    self.crawl_image(file_path)
             logging.info(f"Scraping Complete  {total_product} product of url: {url} ")
             return total_product
+        
         return 0
 
     def process_data(self, file_path):
-        df = pd.read_csv(file_path, header=None)
-        df.drop_duplicates(inplace=True)
-        df.to_csv(file_path, index=False, header=False)
+        if os.path.exists(file_path):
+            df = pd.read_csv(file_path, header=None)
+            df.drop_duplicates(inplace=True)
+            df.to_csv(file_path, index=False, header=False)
 
     def create_checklist(self):
         try:
@@ -113,9 +117,10 @@ class Crawler:
 
     def crawl_image(self, file_path):
         df = pd.read_csv(file_path, header=None)
+        df.drop_duplicates(inplace=True)
         df.columns = ['product_name', 'image_link']
 
-        product_image_folder = os.path.join(self.image_path, file_path.split('\\')[-1].split('.')[0])
+        product_image_folder = os.path.join(self.image_path, file_path.split(os.sep)[-1].split('.')[0])
 
         if not os.path.exists(self.image_path):
             os.makedirs(self.image_path)
@@ -132,26 +137,34 @@ class Crawler:
             for future in concurrent.futures.as_completed(futures):
                 data = future.result()
                 print(data)
-
+        return len(df)
+    
+    
     def run(self):
-        total_product = 0
-        for index, row in self.checklist_df.iterrows():
-            url = row['url']
-            status = row['status']
-            if status == 'NOT COMPLETE':
-                status = self.update_status(index, 'DOING')
-            if status == 'DOING':
-                name_file = url.split('/')[-2]
-                file_path = os.path.join(os.getcwd(), 'data', f'{name_file}.csv')
-                start_time = time.time()
-                total_product += self.crawl_all_products(url, file_path)
-                self.process_data(file_path)
-                self.crawl_image(file_path)
-                logging.info(f"------Crawl product at {url} complete.Processing times completed in {time.time() - start_time} seconds ---")
-                status = self.update_status(index, 'DONE')
+        logging.info("*****************************************")
+        logging.info("Crawl Session Begining")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = []
+            for index, row in self.checklist_df.iterrows():
+                url = row['url']
+                status = row['status']
+                if status == 'NOT COMPLETE':
+                    status = self.update_status(index, 'DOING')
+                if status == 'DOING':
+                    name_file = url.split('/')[-2]
+                    file_path = os.path.join(os.getcwd(), 'data', f'{name_file}.csv')
+
+                    start_time = time.time()
+                    futures.append(executor.submit(self.crawl_all_products, url, file_path))
+                    self.process_data(file_path)
+                    logging.info(f"------Hoàn thành thu thập sản phẩm tại {url}. Thời gian xử lý hoàn thành trong {time.time() - start_time} giây ---")
+                    status = self.update_status(index, 'DONE')
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                self.total_product += result if isinstance(result, int) else 0
+
         logging.info("*****************************************")
         logging.info("Crawl Session Finish")
-        print(f'Đã crawl {total_product} product!!')
 
 
 if __name__ == "__main__":
@@ -159,4 +172,8 @@ if __name__ == "__main__":
     urls_checklist = os.path.join(os.getcwd(), 'urls_checklist.csv')
     image_path = os.path.join(os.getcwd(), 'data', 'image')
     crawler = Crawler(urls_path, urls_checklist,image_path)
+
+    start_time = time.time()
     crawler.run()
+    end_time = time.time()
+    print(f'Đã crawl {crawler.total_product} product trong {end_time - start_time} s')
