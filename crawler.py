@@ -24,8 +24,10 @@ class Crawler:
                 response = requests.get(url)
                 response.raise_for_status()
                 return response
+            except requests.exceptions.ConnectionError:
+                print("Network Disconnect!!!")
             except requests.exceptions.RequestException:
-                print("Network disconnection!!!")
+                print(f"Request URLs {url} Error!!!")
                 time.sleep(5)
 
     def get_totalpage_totalproducts(self, url):
@@ -65,7 +67,7 @@ class Crawler:
                 for future in concurrent.futures.as_completed(futures):
                     data = future.result()
                     self.save_to_csv(data, file_path)
-                    self.crawl_image(file_path)
+                    self.crawl_image(file_path,data)
             logging.info(f"Scraping Complete  {total_product} product of url: {url} ")
             return total_product
         
@@ -107,15 +109,14 @@ class Crawler:
         else:
             logging.info(f"Error: Unable to load image from {image_url}")
 
-    def download_image_if_not_exists(self, link, product_name, product_image_folder):
+    def download_image_if_not_exists(self,product_name,link, product_image_folder):
         name = f"{product_name.strip().replace(' ', '-')}{link.split('/')[-1]}"
         save_path = os.path.join(product_image_folder, name)
         if not os.path.exists(save_path):
             self.download_image(link, save_path)
             return f"Dowloaded {name}"
-        return f"Image {name} exist"
 
-    def crawl_image(self, file_path):
+    def crawl_image(self, file_path,products_infor = None):
         df = pd.read_csv(file_path, header=None)
         df.drop_duplicates(inplace=True)
         df.columns = ['product_name', 'image_link']
@@ -129,15 +130,13 @@ class Crawler:
 
         logging.info("---------------------------------------------------")
         logging.info(f"START DOWNLOAD IMAGE IN FILE: {file_path} ")
-        links = df['image_link'].tolist()
-        product_names = df['product_name'].tolist()
+        
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_woker) as executor:
-            futures = [executor.submit(self.download_image_if_not_exists, link, product_name, product_image_folder) for link, product_name in zip(links, product_names)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(self.download_image_if_not_exists,product_name,link, product_image_folder) for product_name,link in products_infor]
             for future in concurrent.futures.as_completed(futures):
                 data = future.result()
                 print(data)
-        return len(df)
     
     
     def run(self):
@@ -153,11 +152,8 @@ class Crawler:
                 if status == 'DOING':
                     name_file = url.split('/')[-2]
                     file_path = os.path.join(os.getcwd(), 'data', f'{name_file}.csv')
-
-                    start_time = time.time()
                     futures.append(executor.submit(self.crawl_all_products, url, file_path))
                     self.process_data(file_path)
-                    logging.info(f"------Hoàn thành thu thập sản phẩm tại {url}. Thời gian xử lý hoàn thành trong {time.time() - start_time} giây ---")
                     status = self.update_status(index, 'DONE')
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
@@ -168,7 +164,7 @@ class Crawler:
 
 
 if __name__ == "__main__":
-    urls_path = os.path.join(os.getcwd(), 'data', 'urls_test.csv')
+    urls_path = os.path.join(os.getcwd(),'product_links','entire_urls.csv')
     urls_checklist = os.path.join(os.getcwd(), 'urls_checklist.csv')
     image_path = os.path.join(os.getcwd(), 'data', 'image')
     crawler = Crawler(urls_path, urls_checklist,image_path)
