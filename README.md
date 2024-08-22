@@ -3,8 +3,8 @@
 
 # Table of Contents
 
-1. [Purpose](#introduction)
-2. [Example Product Data](#installation)
+1. [Purpose](#purpose)
+2. [Example Product Data](#example-Product-Data)
 
 ## Purpose
 - As a Data Engineer working for an AI company, your task is to design and implement an efficient web crawling bot to gather product photos along with their descriptions and information on website www.glamira.com for the purpose of training a machine learning model for jewelry product detection.
